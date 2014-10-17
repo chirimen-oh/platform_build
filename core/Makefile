@@ -645,6 +645,15 @@ ifeq (,$(filter true, $(TARGET_NO_KERNEL) $(TARGET_NO_RECOVERY)))
 INSTALLED_RECOVERYIMAGE_TARGET := $(PRODUCT_OUT)/recovery.img
 
 recovery_initrc := $(call include-path-for, recovery)/etc/init.rc
+recovery_initrc_private := $(TARGET_DEVICE_DIR)/recovery/etc/init.rc
+recovery_initrc_private := $(if $(wildcard $(recovery_initrc_private)), $(recovery_initrc_private),\
+    device/rockchip/rksdk/recovery/etc/init.rc)
+recovery_initrc_emmc_private := $(TARGET_DEVICE_DIR)/recovery/etc/init.bootmode.emmc.rc
+recovery_initrc_emmc_private := $(if $(wildcard $(recovery_initrc_emmc_private)), $(recovery_initrc_emmc_private),\
+    device/rockchip/rksdk/recovery/etc/init.bootmode.emmc.rc)
+recovery_initrc_mtd_private := $(TARGET_DEVICE_DIR)/recovery/etc/init.bootmode.unknown.rc
+recovery_initrc_mtd_private := $(if $(wildcard $(recovery_initrc_mtd_private)), $(recovery_initrc_mtd_private),\
+    device/rockchip/rksdk/recovery/etc/init.bootmode.unknown.rc)
 recovery_kernel := $(INSTALLED_KERNEL_TARGET) # same as a non-recovery system
 recovery_ramdisk := $(PRODUCT_OUT)/ramdisk-recovery.img
 recovery_build_prop := $(INSTALLED_BUILD_PROP_TARGET)
@@ -662,21 +671,35 @@ recovery_font := $(call include-path-for, recovery)/fonts/12x22.png
 endif
 
 recovery_resources_private := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery/res))
+recovery_resources_private := $(if $(wildcard $(recovery_resources_private)), $(recovery_resources_private),\
+    device/rockchip/rksdk/recovery/res)
 recovery_resource_deps := $(shell find $(recovery_resources_common) \
   $(recovery_resources_private) -type f)
 ifdef TARGET_RECOVERY_FSTAB
 recovery_fstab := $(TARGET_RECOVERY_FSTAB)
 else
-recovery_fstab := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery.fstab))
+recovery_fstab_mtd := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery.fstab))
+recovery_fstab_mtd := $(if $(wildcard $(recovery_fstab_mtd)), $(recovery_fstab_mtd),\
+    device/rockchip/rksdk/recovery.fstab)
+recovery_fstab_emmc := $(strip $(wildcard $(TARGET_DEVICE_DIR)/recovery.emmc.fstab))
+recovery_fstab_emmc := $(if $(wildcard $(recovery_fstab_emmc)), $(recovery_fstab_emmc),\
+    device/rockchip/rksdk/recovery.emmc.fstab)
 endif
 # Named '.dat' so we don't attempt to use imgdiff for patching it.
 RECOVERY_RESOURCE_ZIP := $(TARGET_OUT)/etc/recovery-resource.dat
+
+ifeq ($(TARGET_ROCKCHIP_PCBATEST),true)
+pcba_core := $(call intermediates-dir-for,EXECUTABLES,pcba_core)/pcba_core
+recovery_contents := $(TOPDIR)device/rockchip/rksdk/recovery_contents.sh
+else
+recovery_contents := $(TOPDIR)device/rockchip/rksdk/recovery_contents.sh
+endif
 
 ifeq ($(recovery_resources_private),)
   $(info No private recovery resources for TARGET_DEVICE $(TARGET_DEVICE))
 endif
 
-ifeq ($(recovery_fstab),)
+ifeq ($(recovery_fstab_mtd),)
   $(info No recovery.fstab for TARGET_DEVICE $(TARGET_DEVICE))
 endif
 
@@ -722,10 +745,12 @@ $(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) $(RECOVE
 		$(INSTALLED_RAMDISK_TARGET) \
 		$(INSTALLED_BOOTIMAGE_TARGET) \
 		$(recovery_binary) \
+		$(pcba_core) \
 		$(recovery_initrc) $(recovery_kernel) \
 		$(INSTALLED_2NDBOOTLOADER_TARGET) \
 		$(recovery_build_prop) $(recovery_resource_deps) \
-		$(recovery_fstab) \
+		$(recovery_fstab_mtd) \
+		$(recovery_fstab_emmc) \
 		$(RECOVERY_INSTALL_OTA_KEYS)
 	@echo ----- Making recovery image ------
 	$(hide) rm -rf $(TARGET_RECOVERY_OUT)
@@ -737,13 +762,20 @@ $(INSTALLED_RECOVERYIMAGE_TARGET): $(MKBOOTFS) $(MKBOOTIMG) $(MINIGZIP) $(RECOVE
 	$(hide) rm -f $(TARGET_RECOVERY_ROOT_OUT)/init*.rc
 	$(hide) cp -f $(recovery_initrc) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(hide) -cp $(TARGET_ROOT_OUT)/init.recovery.*.rc $(TARGET_RECOVERY_ROOT_OUT)/
+	$(hide)cp -f $(recovery_initrc_private) $(TARGET_RECOVERY_ROOT_OUT)/
+	$(hide)cp -f $(recovery_initrc_emmc_private) $(TARGET_RECOVERY_ROOT_OUT)/
+	$(hide)cp -f $(recovery_initrc_mtd_private) $(TARGET_RECOVERY_ROOT_OUT)/
 	$(hide) cp -f $(recovery_binary) $(TARGET_RECOVERY_ROOT_OUT)/sbin/
 	$(hide) cp -rf $(recovery_resources_common) $(TARGET_RECOVERY_ROOT_OUT)/
-	$(hide) cp -f $(recovery_font) $(TARGET_RECOVERY_ROOT_OUT)/res/images/font.png
+
+	$(recovery_contents) $(TARGET_PRODUCT) $(PRODUCT_OUT) $(TARGET_BOARD_PLATFORM) $(TARGET_ROCKCHIP_PCBATEST)
+
 	$(hide) $(foreach item,$(recovery_resources_private), \
 	  cp -rf $(item) $(TARGET_RECOVERY_ROOT_OUT)/)
-	$(hide) $(foreach item,$(recovery_fstab), \
+	$(hide) $(foreach item,$(recovery_fstab_mtd), \
 	  cp -f $(item) $(TARGET_RECOVERY_ROOT_OUT)/etc/recovery.fstab)
+	$(hide) $(foreach item,$(recovery_fstab_emmc), \
+	  cp -f $(item) $(TARGET_RECOVERY_ROOT_OUT)/etc/recovery.emmc.fstab)
 	$(hide) cp $(RECOVERY_INSTALL_OTA_KEYS) $(TARGET_RECOVERY_ROOT_OUT)/res/keys
 	$(hide) cat $(INSTALLED_DEFAULT_PROP_TARGET) $(recovery_build_prop) \
 	        > $(TARGET_RECOVERY_ROOT_OUT)/default.prop
@@ -1300,7 +1332,7 @@ target-files-package: $(BUILT_TARGET_FILES_PACKAGE)
 ifneq ($(TARGET_PRODUCT),sdk)
 ifeq ($(filter generic%,$(TARGET_DEVICE)),)
 ifneq ($(TARGET_NO_KERNEL),true)
-ifneq ($(recovery_fstab),)
+ifneq ($(recovery_fstab_mtd),)
 
 # -----------------------------------------------------------------
 # OTA update package
