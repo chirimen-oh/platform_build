@@ -38,7 +38,7 @@ build_mac_version := $(shell sw_vers -productVersion)
 
 ifneq ($(strip $(BUILD_MAC_SDK_EXPERIMENTAL)),)
 # SDK 10.7 and higher is not fully compatible with Android.
-mac_sdk_versions_supported :=  10.7 10.8
+mac_sdk_versions_supported :=  10.7 10.8 10.9
 else
 mac_sdk_versions_supported :=  10.6
 endif # BUILD_MAC_SDK_EXPERIMENTAL
