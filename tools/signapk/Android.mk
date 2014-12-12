@@ -18,11 +18,16 @@ LOCAL_PATH := $(call my-dir)
 # the signapk tool (a .jar application used to sign packages)
 # ============================================================
 include $(CLEAR_VARS)
+
 LOCAL_MODULE := signapk
-LOCAL_SRC_FILES := SignApk.java
-LOCAL_JAR_MANIFEST := SignApk.mf
-LOCAL_STATIC_JAVA_LIBRARIES := bouncycastle-host bouncycastle-bcpkix-host
-include $(BUILD_HOST_JAVA_LIBRARY)
+LOCAL_SRC_FILES := signapk.jar
+LOCAL_MODULE_CLASS := JAVA_LIBRARIES
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_SUFFIX := $(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_BUILT_MODULE_STEM := signapk$(COMMON_JAVA_PACKAGE_SUFFIX)
+LOCAL_IS_HOST_MODULE := true
+
+include $(BUILD_PREBUILT)
 
 ifeq ($(TARGET_BUILD_APPS),)
 # The post-build signing tools need signapk.jar, but we don't
